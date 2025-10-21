@@ -3,7 +3,7 @@ name: TB Update
 on:
   push:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'  # 每天 UTC 00:00 执行
   workflow_dispatch:
 
 jobs:
@@ -12,30 +12,28 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y wget jq git
-
     - name: Update TV logos
       run: |
+        # 删除旧 tb 文件夹
+        rm -rf tb
         mkdir -p tb
-        repo_api="https://api.github.com/repos/fanmingming/live/contents/tv"
-        files=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-                      -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                      -H "User-Agent: GitHub-Actions" \
-                      $repo_api | jq -r '.[] | select(.name | endswith(".png")) | .download_url')
-        for url in $files; do
-          filename=$(basename "$url")
-          wget -q -O "tb/$filename" "$url"
-        done
 
+        # 克隆远程仓库到临时目录
+        git clone --depth 1 https://github.com/fanmingming/live.git temp_repo
+
+        # 复制 tv 文件夹到 tb
+        cp -r temp_repo/tv/* tb/
+
+        # 删除临时目录
+        rm -rf temp_repo
+
+        # 配置 Git
         git config --local user.name "github-actions[bot]"
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-        # 直接提交，不检查 diff
-        git add tb/
-        git commit -m "Update TV logos: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" || echo "No changes to commit"
+        # 提交并推送
+        git add tb
+        git commit -m "Update TV logos: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
         git push origin main
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
