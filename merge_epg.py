@@ -2,16 +2,33 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
+import wget
 from lxml import etree
 
-# 可自定义 EPG 源文件路径
-EPG_FILES = [
-    "epg_temp/epg1.xml",
-    "epg_temp/epg2.xml",
-    "epg_temp/epg3.xml"
-]
+# 获取 workflow 传入的源列表（用逗号分隔）
+EPG_URLS = os.environ.get("EPG_SOURCES", "")
+if not EPG_URLS:
+    print("❌ 未配置 EPG 源，请在 workflow 中设置 EPG_SOURCES 环境变量")
+    sys.exit(1)
 
+EPG_URLS = [url.strip() for url in EPG_URLS.split(",") if url.strip()]
+
+EPG_TEMP_DIR = "epg_temp"
 OUTPUT_FILE = "e.xml"
+
+def download_sources(urls, temp_dir):
+    os.makedirs(temp_dir, exist_ok=True)
+    local_files = []
+    for i, url in enumerate(urls, start=1):
+        local_file = os.path.join(temp_dir, f"epg{i}.xml")
+        try:
+            print(f"📥 下载 {url} -> {local_file}")
+            wget.download(url, out=local_file)
+            local_files.append(local_file)
+        except Exception as e:
+            print(f"⚠️ 下载失败 {url}: {e}")
+    return local_files
 
 def merge_epg(files, output):
     tv = etree.Element("tv")
@@ -30,23 +47,21 @@ def merge_epg(files, output):
             print(f"❌ 解析失败 {f}: {e}")
             continue
 
-        # 合并频道
         for ch in root.findall("channel"):
             cid = ch.get("id")
             if cid and cid not in seen_channels:
                 seen_channels.add(cid)
                 tv.append(ch)
 
-        # 合并节目
         for prog in root.findall("programme"):
             key = (prog.get("start"), prog.get("stop"), prog.get("channel"))
             if all(key) and key not in seen_programmes:
                 seen_programmes.add(key)
                 tv.append(prog)
 
-    # 输出合并后的 XML 文件
     etree.ElementTree(tv).write(output, encoding="utf-8", xml_declaration=True)
     print(f"🎉 合并完成: {output} 共 {len(seen_channels)} 个频道, {len(seen_programmes)} 条节目")
 
 if __name__ == "__main__":
-    merge_epg(EPG_FILES, OUTPUT_FILE)
+    files = download_sources(EPG_URLS, EPG_TEMP_DIR)
+    merge_epg(files, OUTPUT_FILE)
