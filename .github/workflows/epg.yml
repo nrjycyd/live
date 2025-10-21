@@ -1,50 +1,22 @@
-name: EPG Merge & Validate Update
-
+name: EPG Update
 on:
+  push:
   schedule:
-    - cron: '15 */2 * * *'
-  workflow_dispatch:
-
-permissions:
-  contents: write
+    - cron: '15 16,18,20,22,0,2,4,6,8,10,12,14 * * *'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    env:
-      EPG_SOURCES: |
-        https://epg.112114.xyz/pp.xml,
-        https://epg.51zmt.top:8000/e.xml,
-        https://epg.pw/xmltv.php
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y python3 python3-lxml wget libxml2-utils
-
-      - name: Merge EPG
-        run: python3 merge_epg.py
-
-      - name: Validate XML format
-        run: |
-          echo "🧩 Checking XML syntax..."
-          xmllint --noout e.xml
-          echo "✅ XML 格式校验通过。"
-
-      - name: Commit and push changes
-        run: |
-          git config --local user.name "github-actions[bot]"
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet e.xml; then
-            echo "No EPG updates."
-          else
-            git add e.xml
-            git commit -m "EPG Merge & Validate Update: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            git push origin main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - uses: actions/checkout@v3
+    - name: Update EPG Files
+      run: |
+        rm -f e.xml && wget https://epg.112114.xyz/pp.xml -O e.xml
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git add e.xml
+        git commit -m "EPG Update."
+    - name: Push changes
+      run: git push origin main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
