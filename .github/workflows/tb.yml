@@ -1,0 +1,52 @@
+name: TB Update
+
+# 定时触发，也支持手动触发
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 每天 UTC 00:00 执行
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch_logos:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y wget jq git
+
+    - name: Download TV logos
+      run: |
+        mkdir -p tb
+        # 获取 GitHub API 列表
+        repo_api="https://api.github.com/repos/fanmingming/live/contents/tv"
+        echo "Fetching file list from $repo_api"
+        files=$(curl -s $repo_api | jq -r '.[] | select(.name | endswith(".png")) | .download_url')
+        echo "Found files:"
+        echo "$files"
+        # 下载每个 png 到 tb 目录
+        for url in $files; do
+          filename=$(basename $url)
+          wget -q -O "tb/$filename" "$url"
+        done
+
+    - name: Commit and push logos
+      run: |
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        if git diff --quiet tb; then
+          echo "No updates for logos."
+        else
+          git add tb
+          git commit -m "Update TV logos: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          git push origin main
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
