@@ -4,6 +4,7 @@ on:
   push:
   schedule:
     - cron: '0 0 * * *'  # 每天 UTC 00:00 执行
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,28 +12,35 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y wget jq git
+
     - name: Update TV logos
       run: |
         mkdir -p tb
-        # 获取 GitHub API 列表
         repo_api="https://api.github.com/repos/fanmingming/live/contents/tv"
-        files=$(curl -s $repo_api | jq -r '.[] | select(.name | endswith(".png")) | .download_url')
-
-        # 下载覆盖 tb 目录下文件
+        files=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+                      -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                      -H "User-Agent: GitHub-Actions" \
+                      $repo_api | jq -r '.[] | select(.name | endswith(".png")) | .download_url')
+        echo "Files to download:"
+        echo "$files"
         for url in $files; do
           filename=$(basename "$url")
-          wget -q -O "tb/$filename" "$url"
+          wget -O "tb/$filename" "$url" || echo "Failed: $url"
         done
 
-        # 配置 git
         git config --local user.name "github-actions[bot]"
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-        # 添加所有 tb 文件并提交
-        git add tb/
-        git commit -m "Update TV logos."
-
-    - name: Push changes
-      run: git push origin main
+        if git diff --quiet tb && git diff --cached --quiet; then
+          echo "No updates in tb directory."
+        else
+          git add tb/
+          git commit -m "Update TV logos: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          git push origin main
+        fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
