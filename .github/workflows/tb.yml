@@ -3,7 +3,7 @@ name: TB Update
 on:
   push:
   schedule:
-    - cron: '0 0 * * *'  # 每天 UTC 00:00 执行
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 jobs:
@@ -25,22 +25,17 @@ jobs:
                       -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                       -H "User-Agent: GitHub-Actions" \
                       $repo_api | jq -r '.[] | select(.name | endswith(".png")) | .download_url')
-        echo "Files to download:"
-        echo "$files"
         for url in $files; do
           filename=$(basename "$url")
-          wget -O "tb/$filename" "$url" || echo "Failed: $url"
+          wget -q -O "tb/$filename" "$url"
         done
 
         git config --local user.name "github-actions[bot]"
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-        if git diff --quiet tb && git diff --cached --quiet; then
-          echo "No updates in tb directory."
-        else
-          git add tb/
-          git commit -m "Update TV logos: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          git push origin main
-        fi
+        # 直接提交，不检查 diff
+        git add tb/
+        git commit -m "Update TV logos: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" || echo "No changes to commit"
+        git push origin main
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
