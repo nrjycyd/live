@@ -14,26 +14,30 @@ jobs:
 
     - name: Update TV logos
       run: |
-        # 删除旧 tb 文件夹
-        rm -rf tb
+        # 删除旧 tb 文件夹（仅保留一级文件）
         mkdir -p tb
+        temp_dir=$(mktemp -d)
 
         # 克隆远程仓库到临时目录
-        git clone --depth 1 https://github.com/fanmingming/live.git temp_repo
+        git clone --depth 1 https://github.com/fanmingming/live.git "$temp_dir"
 
-        # 复制 tv 文件夹到 tb
-        cp -r temp_repo/tv/* tb/
+        # 只复制一级 png 文件到 tb，忽略二级目录
+        find "$temp_dir/tv" -maxdepth 1 -type f -name '*.png' -exec cp -u {} tb/ \;
 
         # 删除临时目录
-        rm -rf temp_repo
+        rm -rf "$temp_dir"
 
         # 配置 Git
         git config --local user.name "github-actions[bot]"
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-        # 提交并推送
-        git add tb
-        git commit -m "Update TV logos: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        git push origin main
+        # 仅当 tb 有变动时提交
+        if git status --porcelain | grep -q '^??\|^ M'; then
+          git add tb
+          git commit -m "Update TV logos: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          git push origin main
+        else
+          echo "No changes in tb directory."
+        fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
