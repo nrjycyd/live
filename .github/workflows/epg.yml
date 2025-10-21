@@ -1,0 +1,103 @@
+name: EPG Merge & Validate Update
+
+on:
+  schedule:
+    - cron: '15 */2 * * *'   # 每2小时运行一次（UTC时间）
+  workflow_dispatch:          # 支持手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y python3 python3-lxml wget xmllint || true
+        # Ubuntu 自带的 xmllint 命令在 libxml2-utils 包中
+        sudo apt-get install -y libxml2-utils
+
+    - name: Download and merge EPG sources
+      run: |
+        mkdir -p epg_temp
+        cd epg_temp
+
+        echo "📥 Downloading EPG sources..."
+        wget -q -O epg1.xml "https://epg.112114.xyz/pp.xml" || true
+        wget -q -O epg2.xml "https://epg.51zmt.top:8000/e.xml" || true
+
+        cd ..
+
+        # 创建 Python 合并脚本
+        cat > merge_epg.py <<'PY'
+import os
+from lxml import etree
+
+def merge_epg(files, output):
+    tv = etree.Element("tv")
+    seen_channels = set()
+    seen_programmes = set()
+
+    for f in files:
+        if not os.path.exists(f) or os.path.getsize(f) < 1000:
+            print(f"⚠️ 跳过无效文件: {f}")
+            continue
+        print(f"✅ 读取 {f}")
+        try:
+            tree = etree.parse(f)
+            root = tree.getroot()
+        except Exception as e:
+            print(f"❌ 解析失败 {f}: {e}")
+            continue
+
+        # 合并频道
+        for ch in root.findall("channel"):
+            cid = ch.get("id")
+            if cid and cid not in seen_channels:
+                seen_channels.add(cid)
+                tv.append(ch)
+
+        # 合并节目
+        for prog in root.findall("programme"):
+            key = (prog.get("start"), prog.get("stop"), prog.get("channel"))
+            if all(key) and key not in seen_programmes:
+                seen_programmes.add(key)
+                tv.append(prog)
+
+    etree.ElementTree(tv).write(output, encoding="utf-8", xml_declaration=True)
+    print(f"🎉 合并完成: {output} 共 {len(seen_channels)} 个频道, {len(seen_programmes)} 条节目")
+
+merge_epg(
+    ["epg_temp/epg1.xml", "epg_temp/epg2.xml", "epg_temp/epg3.xml"],
+    "e.xml"
+)
+PY
+
+        python3 merge_epg.py
+
+    - name: Validate XML format
+      run: |
+        echo "🧩 Checking XML syntax..."
+        if xmllint --noout e.xml 2>/dev/null; then
+          echo "✅ XML 格式校验通过。"
+        else
+          echo "❌ XML 格式错误，请检查合并逻辑！"
+          exit 1
+        fi
+
+    - name: Commit and push changes
+      run: |
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        if git diff --quiet e.xml; then
+          echo "No EPG updates."
+        else
+          git add e.xml
+          git commit -m "EPG Merge & Validate Update: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          git push origin main
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
