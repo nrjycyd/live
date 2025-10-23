@@ -14,9 +14,9 @@ jobs:
 
     - name: Update TV logos (keep local files & log)
       run: |
-        mkdir -p tb-fangmingming
+        mkdir -p tb-fanmingming
         temp_dir=$(mktemp -d)
-        log_file="tb-fangmingming/update_log.txt"
+        log_file="tb-fanmingming/update_log.txt"
 
         echo "TB Update Log - $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > "$log_file"
         echo "===============================" >> "$log_file"
@@ -27,7 +27,7 @@ jobs:
         # 遍历远程 tv 目录一级 png 文件
         find "$temp_dir/tv" -maxdepth 1 -type f -name '*.png' | while read remote_file; do
           filename=$(basename "$remote_file")
-          target_file="tb-fangmingming/$filename"
+          target_file="tb-fanmingming/$filename"
 
           if [ ! -f "$target_file" ]; then
             cp "$remote_file" "$target_file"
