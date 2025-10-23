@@ -1,9 +1,9 @@
 name: TB Update with Log
 
 on:
-  # push:
-  # schedule:
-  #   - cron: '0 0 * * *'  # 每天 UTC 00:00 执行
+  push:
+  schedule:
+    - cron: '0 0 * * *'  # 每天 UTC 00:00 执行
   workflow_dispatch:
 
 jobs:
@@ -49,7 +49,7 @@ jobs:
 
         # 仅当 tb 有变动时提交
         if git status --porcelain | grep -q '^??\|^ M'; then
-          git add tb-fangmingming
+          git add tb-fanmingming
           git commit -m "Update TV logos with log: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           git push origin main
         else
